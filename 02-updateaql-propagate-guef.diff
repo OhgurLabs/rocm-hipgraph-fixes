@@ -1,0 +1,20 @@
+diff --git a/projects/clr/hipamd/src/hip_graph.cpp b/projects/clr/hipamd/src/hip_graph.cpp
+--- a/projects/clr/hipamd/src/hip_graph.cpp
++++ b/projects/clr/hipamd/src/hip_graph.cpp
+@@ -2826,6 +2826,16 @@
+         auto graphExec = reinterpret_cast<hip::GraphExec*>(hGraphExec);
+         if (graphExec->IsSegmentSchedulingEnabled() && newGraphNodes[i]->GraphCaptureEnabled()) {
+           status = graphExec->UpdateAQLPacket(reinterpret_cast<hip::GraphKernelNode*>(oldGraphExecNodes[i]));
++          if (status != hipSuccess) {
++            // A packet re-capture failure (e.g. kernarg allocation under device-memory
++            // exhaustion) leaves the exec holding the previously captured packet.
++            // Reporting success here makes the next launch execute that stale packet:
++            // silent output corruption, and with kernarg-pool recycling a malformed
++            // AQL packet (rocm-systems#10021 addendum). Surface the failure instead.
++            *hErrorNode_out = reinterpret_cast<hipGraphNode_t>(newGraphNodes[i]);
++            *updateResult_out = hipGraphExecUpdateError;
++            HIP_RETURN(hipErrorGraphExecUpdateFailure);
++          }
+         }
+       }
+     } else {

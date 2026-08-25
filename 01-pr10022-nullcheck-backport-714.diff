@@ -1,0 +1,72 @@
+diff --git a/projects/clr/hipamd/src/hip_graph_internal.hpp b/projects/clr/hipamd/src/hip_graph_internal.hpp
+index 7ec3417..bb51803 100644
+--- a/projects/clr/hipamd/src/hip_graph_internal.hpp
++++ b/projects/clr/hipamd/src/hip_graph_internal.hpp
+@@ -274,13 +274,26 @@ class GraphNode : public hipGraphNodeDOTAttribute {
+     // Clear the pointer array
+     gpuPackets_.clear();
+ 
++    hipError_t submit_status = hipSuccess;
+     for (auto& command : commands_) {
+       command->setPktCapturingState(true, &gpuPackets_, kernArgMgr, &capturedKernelName_);
+       // Enqueue command to capture GPU Packet. The packet is not submitted to the device.
+       // The packet is stored in gpuPacket_ and submitted during graph launch.
+       command->submit(*(command->queue())->vdev());
++      // A kernarg allocation failure inside submit marks the command with a
++      // negative status (see VirtualGPU::submitKernelInternal) rather than
++      // forming a packet; surface it instead of reporting a successful update
++      // that would launch with a stale packet. (Backport of rocm-systems
++      // PR #10022 to the rocm-7.2.4 tag.)
++      if (submit_status == hipSuccess && command->status() < 0) {
++        submit_status = hipErrorOutOfMemory;
++      }
+       command->release();
+     }
++    if (submit_status != hipSuccess) {
++      commands_.clear();
++      return submit_status;
++    }
+ 
+     // Accumulate packets directly into the batch (only if batch vectors are provided)
+     if (batchPackets != nullptr && batchKernelNames != nullptr) {
+diff --git a/projects/clr/rocclr/device/rocm/rocblit.cpp b/projects/clr/rocclr/device/rocm/rocblit.cpp
+index 1ae49c9..cbfc2f4 100644
+--- a/projects/clr/rocclr/device/rocm/rocblit.cpp
++++ b/projects/clr/rocclr/device/rocm/rocblit.cpp
+@@ -2470,6 +2470,10 @@ bool KernelBlitManager::fillBuffer1D(device::Memory& memory, const void* pattern
+       auto constBuf = isGraphPktCapturing
+                           ? gpu().command()->getGraphKernArg(kCBSize, kCBAlignment, dev().index())
+                           : gpu().allocKernArg(kCBSize, kCBAlignment);
++      if (constBuf == nullptr) {
++        LogError("Failed to allocate fill constant buffer (out of memory)");
++        return false;
++      }
+ 
+       // If pattern has been expanded, use the expanded pattern, otherwise use the default pattern.
+       if (packed_obj.pattern_expanded_) {
+@@ -2566,6 +2570,10 @@ bool KernelBlitManager::fillBuffer2D(device::Memory& memory, const void* pattern
+     auto constBuf = isGraphPktCapturing
+                         ? gpu().command()->getGraphKernArg(kCBSize, kCBAlignment, dev().index())
+                         : gpu().allocKernArg(kCBSize, kCBAlignment);
++    if (constBuf == nullptr) {
++      LogError("Failed to allocate fill constant buffer (out of memory)");
++      return false;
++    }
+     memcpy(constBuf, pattern, patternSize);
+ 
+     constexpr bool kDirectVa = true;
+diff --git a/projects/clr/rocclr/device/rocm/rocvirtual.cpp b/projects/clr/rocclr/device/rocm/rocvirtual.cpp
+index a40adc9..cad88dd 100644
+--- a/projects/clr/rocclr/device/rocm/rocvirtual.cpp
++++ b/projects/clr/rocclr/device/rocm/rocvirtual.cpp
+@@ -4349,6 +4349,10 @@ bool VirtualGPU::submitKernelInternal(const amd::NDRangeContainer& sizes, const
+     if (isGraphCapture) {
+       argBuffer = command_->getGraphKernArg(gpuKernel.KernargSegmentByteSize(),
+                                             gpuKernel.KernargSegmentAlignment(), dev().index());
++      if (argBuffer == nullptr) {
++        LogError("Failed to allocate graph kernel argument buffer (out of memory)");
++        return false;
++      }
+       command_->SetKernelName(gpuKernel.getDemangledName());
+     } else {
+       argBuffer = reinterpret_cast<address>(
