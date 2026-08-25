@@ -45,3 +45,19 @@ allocator-side fix (slot reuse on update) belongs upstream.
 
 Workaround with no patches: `GGML_CUDA_DISABLE_GRAPHS=1` (slower, crash-free), or
 the Vulkan backend (never affected).
+
+## Kernel-side status (bug 3: KFD VRAM leak after CP fault) — updated 2026-08-25
+
+The third member of this defect family — KFD leaking the dead process's VRAM (persistent
+`/sys/class/kfd/kfd/proc/<pid>`, device unusable until reboot) after the CP fault — is a
+kernel driver bug, **fixed upstream in Linux 6.15**. Per Felix Kuehling on amd-gfx: a missing
+`kfd_unref_process` in `kfd_dqm_suspend_bad_queue_mes` (kfd_device_queue_manager.c) on the
+`SOC15_INTSRC_CP_BAD_OPCODE` event path, fixed incidentally by commit
+`8544374c0f82edb285779f21b149826fe2c2977c` ("drm/amdkfd: Have kfd driver use same PASID
+values from graphic driver"). The ROCm DKMS driver package also carried the fix; we hit it
+because we ran the in-tree driver of an EOL 6.14 kernel.
+
+If you see wedged cards from this workload shape: a kernel >= 6.15 (or the ROCm DKMS driver)
+removes the leak. The userspace patches here are still required on every kernel — they stop
+the crash and the silent corruption that trigger the fault in the first place. We are
+re-validating the teardown on 7.0.14 now and will note the result here.
