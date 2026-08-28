@@ -27,7 +27,9 @@ of runs, which is evidence against a client-side ABI mismatch rather than a form
 ## Upstream status
 
 - **Crash** — ROCm/rocm-systems issue #10021, fix PR **#10022** by `nycdubliner`. **Not our work.**
-- **Dropped status** — our PR **#10714**. One file, ten lines.
+- **Dropped status** — our PR **#10714**: 3 files, +159. The guard itself is 11 lines in
+  `hip_graph.cpp`; the remainder is a 147-line regression test
+  (`hipGraphExecUpdate_error_propagation_test.cc`) and its CMakeLists entry.
 
 Both were open and unmerged at `develop` tip `e92445f708bfd09d679363144948fa60af6bebdc` when last
 checked (2026-08-27). See [`PRIOR-ART-SWEEP.md`](PRIOR-ART-SWEEP.md) for how that was established.
@@ -77,7 +79,7 @@ anchor matches exactly once.
 | file | what it is |
 |---|---|
 | `rocm10-fix1-fix2b.patch` | both fixes ported to the 10.0 source (`therock-10.0` = `6b0e43f341`), 4 files / 43 insertions. Most of it re-derives #10022's guards for a tree their patch does not apply to. |
-| `pr10714-rebased-develop.patch` | our PR #10714 rebased onto `develop`, 1 file / 10 insertions, carries a `base-commit:` trailer for `git am -3` |
+| `pr10714-rebased-develop.patch` | **the guard hunk extracted from PR #10714**, rebased onto `develop` (1 file / 10 insertions), with a `base-commit:` trailer for `git am -3`. Not the whole PR: #10714 also carries the regression test. Provided for applying the fix to a local tree. |
 | `port-fixes-to-10.py` | anchored applier; aborts unless each anchor matches exactly once |
 | `LIB-MANIFEST.md` | one row per arm: library path, soname, sha256, source tree, patches, rc, plus the run ledger |
 | `VALIDATION.md` | native-build evidence for the port |

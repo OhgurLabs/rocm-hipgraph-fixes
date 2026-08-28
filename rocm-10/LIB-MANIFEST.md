@@ -246,7 +246,7 @@ with them.
 | patch | canonical stat |
 |---|---|
 | `rocm10-fix1-fix2b.patch` | **4 files changed, 43 insertions(+)**, 0 deletions |
-| `pr10714-rebased-develop.patch` | **1 file changed, 10 insertions(+)** — also carried inside the file's own `format-patch` diffstat |
+| `pr10714-rebased-develop.patch` | **1 file changed, 10 insertions(+)** — also carried inside the file's own `format-patch` diffstat. This is the guard hunk extracted from PR #10714, not the whole PR (3 files, +159, including a 147-line regression test). |
 | #10022's clr hunks (arm B) | 3 files, 25 insertions |
 | isolation subset (arm D) | 4 files, 30 insertions |
 | fix2b-only (arm E2) | 1 file, 5 insertions |
