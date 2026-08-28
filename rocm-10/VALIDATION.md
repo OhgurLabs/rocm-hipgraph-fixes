@@ -69,7 +69,8 @@ built library.
 ## 5. Upstream currency
 
 See `PRIOR-ART-SWEEP.md` (same directory). Both defects verified present at `develop` tip
-`e92445f708bfd09d679363144948fa60af6bebdc` on 2026-08-27. Bug 1 is tracked by issue #10021 with
+`e92445f708bfd09d679363144948fa60af6bebdc` on 2026-08-27, and again at
+`97ab4d1f880b1814f736de11453b525bed21a250` on 2026-08-28. Bug 1 is tracked by issue #10021 with
 PR #10022 open (author `nycdubliner`, not us). Bug 2 is our PR #10714, open. The bug-2 call site has
 drifted 2829 → 2828 (`therock-10.0`) → 2831 (`develop` today), so line numbers must be re-verified
 on the day of any submission.

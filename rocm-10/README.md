@@ -31,8 +31,10 @@ of runs, which is evidence against a client-side ABI mismatch rather than a form
   `hip_graph.cpp`; the remainder is a 147-line regression test
   (`hipGraphExecUpdate_error_propagation_test.cc`) and its CMakeLists entry.
 
-Both were open and unmerged at `develop` tip `e92445f708bfd09d679363144948fa60af6bebdc` when last
-checked (2026-08-27). See [`PRIOR-ART-SWEEP.md`](PRIOR-ART-SWEEP.md) for how that was established.
+Both were open and unmerged, and both defects were present in the source, when last checked at
+`develop` tip `97ab4d1f880b1814f736de11453b525bed21a250` (2026-08-28T02:34Z). They were
+also present at the earlier tip `e92445f708bfd09d679363144948fa60af6bebdc` (2026-08-27T23:39Z); the
+three commits between those tips touch none of the four files involved. See [`PRIOR-ART-SWEEP.md`](PRIOR-ART-SWEEP.md) for how that was established.
 
 ## What the ten-line fix does
 
