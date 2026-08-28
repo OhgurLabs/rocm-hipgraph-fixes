@@ -20,7 +20,7 @@ function conform to its own documentation rather than adding new behaviour.
 **Verdict: the exhaustion objection does not survive. Contract defect, not stress artifact.**
 
 ## ATTACK 2 (DATA) — "the reproducer is your own code; maybe its check is wrong"
-Audited at source (`/data18t/clr-fix714/residual_repro.hip`):
+Audited at source (`residual_repro.hip`, in this repository's root):
 - **Lineage:** line 2 records it as *derived from PR #10022's own unit test*,
   `Unit_hipGraphExecUpdate_KernargPoolExhaustion`. The instrument descends from the upstream PR.
 - **Kernel:** `__global__ void WriteValue(int* out, int value) { *out = value; }`.
@@ -36,7 +36,7 @@ Audited at source (`/data18t/clr-fix714/residual_repro.hip`):
 observed either way.** Recorded in full because "we looked and saw nothing" and "we looked and the
 trigger never fired" are different statements, and only the second is true.
 
-Design (`/root/endgap-silent-corruption.sh`, run dir `rocm10-endgap-20260828/`): identical
+Design (local harness script, not included here): identical
 deterministic greedy decode (`temperature 0`, `top_k 1`, `seed 1234`, `cache_prompt false`,
 `ignore_eos true`) on `llama-server`, `-c 217088`, twice per library — `#10022`-only (B) versus
 `#10022`+fix2b (D). Two runs per library establish self-consistency first, without which a

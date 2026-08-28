@@ -1,4 +1,9 @@
 # LIBRARY MANIFEST — which binary proves which claim
+
+> Paths below are labels, not a filesystem layout: absolute prefixes from the machine this
+> ran on have been removed. `lib-*` names a build output directory, `src-*` names a source
+> tree, and run-dir names identify a measurement window. Library sha256 values are the
+> identifiers that matter and are unmodified.
 Every ROCm 10 HIP library built or tested in this work, with the source tree that produced it, the
 patch it carries, its content hash, and the reproducer artifact it generated. Written because both
 of our builds share the same soname (`libamdhip64.so.7.15.26333-6b0e43f341`, from `therock-10.0`),
@@ -10,10 +15,10 @@ Base source for all local builds: `github.com/ROCm/rocm-systems` tag `therock-10
 
 | id | library path | sha256 (16) | bytes | source tree | patch carried | discriminating string |
 |---|---|---|---|---|---|---|
-| **A** | `/data18t/rocm-10.0-local/extract/lib/libamdhip64.so.7` | (as shipped) | — | AMD release | none | soname suffix `-0000000` |
-| **B** | `/data18t/clr-fix10/lib-pr10022-only/` | `e7a591f6b7ecd8ea` | 94,730,144 | `/data18t/clr-fix10/src-pr10022` | **PR #10022 exact bytes**, 3 files / 25 insertions | `Failed to allocate fill constant buffer (out of memory)` = 1, ours = 0 |
-| **C** | `/data18t/clr-fix10/lib-rocm-10.0-fix1-fix2b/` | `7a42ee09f9084eaf` | 94,746,096 | `/data18t/clr-fix10/src` | **our port**, `rocm10-fix1-fix2b.patch` (sha `423aa161c8003bfb`), 4 files / 43 insertions | `batchMemOps: failed to allocate the parameter buffer` = 1, theirs = 0 |
-| — | `/data18t/clr-fix10/lib-develop-stock/` | **never produced** | — | `/data18t/clr-fix10/src-develop` @ `e92445f7` | none (pristine develop) | build fails: `HSA_AMD_SYSTEM_INFO_HOST_ALLOC_DMA_BUF_SUPPORTED` absent from 10.0.0 HSA headers |
+| **A** | `<rocm-10.0 prefix>/lib/libamdhip64.so.7` | (as shipped) | — | AMD release | none | soname suffix `-0000000` |
+| **B** | `lib-pr10022-only/` | `e7a591f6b7ecd8ea` | 94,730,144 | `src-pr10022` | **PR #10022 exact bytes**, 3 files / 25 insertions | `Failed to allocate fill constant buffer (out of memory)` = 1, ours = 0 |
+| **C** | `lib-rocm-10.0-fix1-fix2b/` | `7a42ee09f9084eaf` | 94,746,096 | `src` | **our port**, `rocm10-fix1-fix2b.patch` (sha `423aa161c8003bfb`), 4 files / 43 insertions | `batchMemOps: failed to allocate the parameter buffer` = 1, theirs = 0 |
+| — | `lib-develop-stock/` | **never produced** | — | `src-develop` @ `e92445f7` | none (pristine develop) | build fails: `HSA_AMD_SYSTEM_INFO_HOST_ALLOC_DMA_BUF_SUPPORTED` absent from 10.0.0 HSA headers |
 
 Tree/library correspondence verified after separating the trees:
 
@@ -24,8 +29,8 @@ src-pr10022  batchMemOps guard = 0   their-wording guard = 2   -> produced B
 
 ## Reproducer results, by library id
 
-Instrument: `/data18t/clr-fix714/residual_repro --iters 262144 --report 40000`, gfx1100, 294 W.
-Run dir: `/data18t/benchmarks/rocm10-sufficiency-20260828/`.
+Instrument: `residual_repro --iters 262144 --report 40000`, gfx1100, 294 W.
+Run dir: `rocm10-sufficiency-20260828/`.
 
 **One canonical row per arm. Each row is self-contained: prefix, library path, soname, sha256,
 source tree, patches, rc. Nothing here may be summarised into a combined row.**
@@ -70,7 +75,7 @@ B's result as general runtime behaviour.
 
 | id | library path | sha256 (16) | bytes | source tree | patch carried | discriminating string |
 |---|---|---|---|---|---|---|
-| **D** | `/data18t/clr-fix10/lib-pr10022-plus-fix2b/` | `93d266a3e006bba9` | 94,738,200 | `/data18t/clr-fix10/src-isolation` | **#10022 + our fix2b hunk only**, 4 files / 30 insertions, **no `batchMemOps` guard** | #10022 wording = 1, our `batchMemOps` string = **0** |
+| **D** | `lib-pr10022-plus-fix2b/` | `93d266a3e006bba9` | 94,738,200 | `src-isolation` | **#10022 + our fix2b hunk only**, 4 files / 30 insertions, **no `batchMemOps` guard** | #10022 wording = 1, our `batchMemOps` string = **0** |
 
 Result: **`rc=1`**, `STOP round 83107: hipGraphExecUpdate -> … (910), updateResult=1
 errorNode=0x57d4afbd7300`. Identical outcome to arm C, from a library that provably lacks the
@@ -110,7 +115,7 @@ them into one row.
 
 | field | value |
 |---|---|
-| prefix | `/data18t/rocm-10.1-nightly-local/extract` |
+| prefix | `<rocm-10.1-nightly prefix>` |
 | origin | `nightly.repo.amd.com/rocm/core/tarball/therock-dist-linux-gfx110X-all-10.1.0a20260827.tar.gz`, 2,601,235,266 B |
 | version | **`10.1.0`**, HIP **`libamdhip64.so.7.16.26342-0000000`** (10.0.0 ships `7.15.26333`) |
 | patches | **none.** No `LD_PRELOAD`; `LD_LIBRARY_PATH` = the nightly prefix only |
@@ -128,10 +133,10 @@ needed no build of ours at all.
 
 | field | value |
 |---|---|
-| library | `/data18t/clr-fix10/lib-fix2b-only/`, sha256 `4a337253bf1aa8be`, 94,735,448 B |
-| source | `/data18t/clr-fix10/src-fix2b-only`, a fresh detached **worktree** at `6b0e43f341`, 1 file / 5 insertions |
+| library | `lib-fix2b-only/`, sha256 `4a337253bf1aa8be`, 94,735,448 B |
+| source | `src-fix2b-only`, a fresh detached **worktree** at `6b0e43f341`, 1 file / 5 insertions |
 | patches | our fix2b **only**; `#10022` strings = **0** |
-| **E2** loaded library, proven from `/proc/<pid>/maps` mid-run | `/data18t/clr-fix10/lib-fix2b-only/libamdhip64.so.7.15.26333-6b0e43f341` |
+| **E2** loaded library, proven from `/proc/<pid>/maps` mid-run | `lib-fix2b-only/libamdhip64.so.7.15.26333-6b0e43f341` |
 | result | **`rc=139`** after `round 80000 ok` |
 | artifacts | `repro-E-fix2b-only.out`, `repro-E2-fix2b-only.out` |
 
@@ -175,7 +180,7 @@ regenerate either source state exactly.
 
 ## Run ledger — every artifact on disk (2026-08-28)
 
-Run dirs: `/data18t/benchmarks/rocm10-sufficiency-20260828/` (S),
+Run dirs: `rocm10-sufficiency-20260828/` (S),
 `rocm10-determinism-20260828/` (T), `rocm10-endgap-20260828/` (E).
 
 | artifact | dir | arm | sha256 (16) | rc evidence |

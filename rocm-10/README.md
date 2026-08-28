@@ -20,8 +20,9 @@ sha256s in [`LIB-MANIFEST.md`](LIB-MANIFEST.md).
 | 10.0.0 | yes | no | 3 | no crash, **silent wrong result**: `kernel wrote 83106, expected 83107` |
 | 10.0.0 | yes | yes | 1 | `hipErrorGraphExecUpdateFailure` (910) with `errorNode` populated |
 
-The 10.1-nightly row was re-run with the reproducer rebuilt using AMD's own 10.1 toolchain; it
-faults at the same address inside their library, which rules out ABI drift from a stale client.
+The 10.1-nightly row was also run with the reproducer recompiled using AMD's 10.1 toolchain. It
+faulted at the same offset. The fault address did not move with the client's compiler on that pair
+of runs, which is evidence against a client-side ABI mismatch rather than a formal exclusion.
 
 ## Upstream status
 
@@ -31,14 +32,14 @@ faults at the same address inside their library, which rules out ABI drift from 
 Both were open and unmerged at `develop` tip `e92445f708bfd09d679363144948fa60af6bebdc` when last
 checked (2026-08-27). See [`PRIOR-ART-SWEEP.md`](PRIOR-ART-SWEEP.md) for how that was established.
 
-## Why the ten-line fix is the right shape
+## What the ten-line fix does
 
 `hipGraphExecUpdate` calls `UpdateAQLPacket`, assigns its status, and never reads it. A recapture
 that failed reports success, and the next launch replays the previously captured packet.
 
 There are ten `UpdateAQLPacket` call sites in `hip_graph.cpp`. Nine propagate the status. The one
 inside `hipGraphExecUpdate` is the only one that drops it, and that is the site the patch guards.
-The fix restores the file's own existing convention rather than introducing a new one.
+The change makes that site match the convention already used at the other nine.
 
 AMD's own `hip_runtime_api.h` documents `hipGraphExecUpdate` as returning `hipSuccess` or
 `hipErrorGraphExecUpdateFailure`, with `updateResult_out` reporting whether the update was

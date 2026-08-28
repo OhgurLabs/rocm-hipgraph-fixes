@@ -34,14 +34,14 @@ checking the value the kernel actually wrote each round.
 
 Both arms ran on the same card in the same window, back to back, with the only difference being
 which `libamdhip64` was loaded. Artifacts:
-`/data18t/benchmarks/rocm10-ported-20260828/repro-stock-10.out` and
+the stock-arm reproducer output (artifact retained locally) and
 `.../repro-ported-fix1-fix2b.out`.
 
 **Bug separation, also on a 10.0 base:** with only the bug-1 guards present the crash disappears
 but the silent fault remains and the reproducer catches it —
 `STALE-PACKET round 83107: kernel wrote 83106, expected 83107 (silent corruption)`, exit 3
 (`residual_repro.hip:112-113`). Artifact:
-`/data18t/benchmarks/rocm10-decompose-20260827/repro-rocm10-fix1only.out`. This is why both hunks
+the fix1-only arm's reproducer output (artifact retained locally). This is why both hunks
 are needed: bug 1 is the crash, bug 2 is the wrong answer left behind once the crash is gone.
 
 ## 3. Application-level result — NATIVE 10.0 build
@@ -52,7 +52,7 @@ prefix with this patch's library:
 - first attempt **valid**, no segfault, zero invalidity findings
 - 35 requests, depth 153,472 tokens, 1029 s wall
 - the harness's own gate recorded the loaded runtime from the live process:
-  `rocm=['…/lib-rocm-10.0-fix1-fix2b/libamdhip64.so.7.15.26333-6b0e43f341', '/data18t/rocm-10.0-local/extract']`
+  `rocm=[<our built libamdhip64>, <rocm-10.0 prefix>]`
 
 For contrast, on the same harness and card, **stock** ROCm 10.0.0 segfaulted its first attempt at
 depth 215,482. Run dir: internal serving-harness cert run; artifact retained locally.

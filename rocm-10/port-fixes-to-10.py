@@ -3,11 +3,14 @@
 
 This is a REBASE, not a transplant. The 7.14 patches do not apply: the graph-update path lost its
 IsSegmentSchedulingEnabled() condition, the packet-capture loop gained gpuMetadataPackets_, and the
-blit const buffer was renamed constBuf -> kernArgBase in one of its three sites. Two deliberate
-improvements over the 7.14 patch:
-  * rocblit batchMemOps (a THIRD unguarded graph-kernarg site) is covered too.
-  * rocvirtual's guard is placed after the if/else so the non-graph allocKernArg branch is
-    covered as well, not only the graph-capture branch.
+blit const buffer was renamed constBuf -> kernArgBase in one of its three sites.
+
+Two sites here go beyond what PR #10022 covers:
+  * rocblit batchMemOps, a THIRD unguarded graph-kernarg site (`grep batchMemOps` across #10022's
+    diff returns 0). Code inspection only: it has never been faulted here.
+  * rocvirtual's guard is placed after the if/else so the non-graph allocKernArg branch is covered
+    as well, not only the graph-capture branch.
+Everything else in bug 1 re-derives #10022's guards for a tree their patch does not apply to.
 
 Every anchor must match EXACTLY once or the script aborts without writing anything.
 
@@ -19,7 +22,8 @@ Bug 2 (ours, PR #10714):  hipGraphExecUpdate assigns UpdateAQLPacket()'s status 
 import subprocess, sys
 from pathlib import Path
 
-SRC = Path("/data18t/clr-fix10/src/projects/clr")
+ROOT = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()  # rocm-systems checkout at therock-10.0
+SRC = ROOT / "projects/clr"
 
 EDITS = []
 
@@ -136,5 +140,5 @@ for path, text in texts.items():
     print(f"patched {path.relative_to(SRC)}")
 
 print("\n=== git diff --stat ===")
-print(subprocess.run(["git", "-C", "/data18t/clr-fix10/src", "diff", "--stat"],
+print(subprocess.run(["git", "-C", str(ROOT), "diff", "--stat"],
                      capture_output=True, text=True).stdout)
