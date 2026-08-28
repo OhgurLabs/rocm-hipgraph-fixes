@@ -1,0 +1,110 @@
+diff --git a/projects/clr/hipamd/src/hip_graph.cpp b/projects/clr/hipamd/src/hip_graph.cpp
+index 42e3cf3235..3f758f838b 100644
+--- a/projects/clr/hipamd/src/hip_graph.cpp
++++ b/projects/clr/hipamd/src/hip_graph.cpp
+@@ -2827,6 +2827,15 @@ hipError_t hipGraphExecUpdate(hipGraphExec_t hGraphExec, hipGraph_t hGraph,
+         auto graphExec = reinterpret_cast<hip::GraphExecBase*>(hGraphExec);
+         if (newGraphNodes[i]->GraphCaptureEnabled()) {
+           status = graphExec->UpdateAQLPacket(reinterpret_cast<hip::GraphKernelNode*>(oldGraphExecNodes[i]));
++          if (status != hipSuccess) {
++            // A packet re-capture failure (e.g. kernarg allocation under device-memory
++            // exhaustion) leaves the exec holding the PREVIOUSLY captured packet.  Reporting
++            // success here makes the next launch execute that stale packet: silent output
++            // corruption, and with kernarg-pool recycling a malformed AQL packet.  Surface it.
++            *hErrorNode_out = reinterpret_cast<hipGraphNode_t>(newGraphNodes[i]);
++            *updateResult_out = hipGraphExecUpdateError;
++            HIP_RETURN(hipErrorGraphExecUpdateFailure);
++          }
+         }
+       }
+     } else {
+diff --git a/projects/clr/hipamd/src/hip_graph_internal.hpp b/projects/clr/hipamd/src/hip_graph_internal.hpp
+index 34067876e9..8753df258f 100644
+--- a/projects/clr/hipamd/src/hip_graph_internal.hpp
++++ b/projects/clr/hipamd/src/hip_graph_internal.hpp
+@@ -290,15 +290,33 @@ class GraphNode : public hipGraphNodeDOTAttribute {
+     gpuPackets_.clear();
+     gpuMetadataPackets_.clear();
+ 
++    // A kernarg allocation failure inside submit() marks the command with a negative status
++    // (see VirtualGPU::submitKernelInternal) instead of forming a packet.  Track it so the
++    // capture does not report success while gpuPackets_ holds nothing for that node.
++    hipError_t submit_status = hipSuccess;
+     for (auto& command : commands_) {
+       command->setPktCapturingState(true, &gpuPackets_, kernArgMgr, &capturedKernelName_,
+                                     &gpuMetadataPackets_);
+       // Enqueue command to capture GPU Packet. The packet is not submitted to the device.
+       // The packet is stored in gpuPacket_ and submitted during graph launch.
+       command->submit(*(command->queue())->vdev());
++      if (submit_status == hipSuccess && command->status() < 0) {
++        submit_status = hipErrorOutOfMemory;
++      }
+       command->release();
+     }
+ 
++    if (submit_status != hipSuccess) {
++      // Drop the partial capture: leaving half-populated, index-desynchronised packet vectors
++      // behind is what turns an allocation failure into a stale-packet launch later on.
++      std::for_each(gpuPackets_.begin(), gpuPackets_.end(), [](auto p) { delete[] p; });
++      std::for_each(gpuMetadataPackets_.begin(), gpuMetadataPackets_.end(),
++                    [](auto p) { delete[] p; });
++      gpuPackets_.clear();
++      gpuMetadataPackets_.clear();
++      commands_.clear();
++      return submit_status;
++    }
+     // The metadata capture path appends one metadata packet per AQL packet, but
+     // only on devices with a metadata ring buffer. Normalize to be pointer-parallel
+     // with gpuPackets_ so downstream flattening can rely on a 1:1 index mapping.
+diff --git a/projects/clr/rocclr/device/rocm/rocblit.cpp b/projects/clr/rocclr/device/rocm/rocblit.cpp
+index e476ea9bd7..dd2ca0fe07 100644
+--- a/projects/clr/rocclr/device/rocm/rocblit.cpp
++++ b/projects/clr/rocclr/device/rocm/rocblit.cpp
+@@ -2469,6 +2469,10 @@ bool KernelBlitManager::fillBuffer1D(device::Memory& memory, const void* pattern
+       isGraphPktCapturing
+           ? (unsigned char*)gpu().command()->getGraphKernArg(kCBSize, kCBAlignment, dev().index())
+           : (unsigned char*)gpu().allocKernArg(kCBSize, kCBAlignment);
++  if (kernArgBase == nullptr) {
++    LogError("fillBuffer1D: failed to allocate the fill constant buffer (out of memory)");
++    return false;
++  }
+ 
+   assert((patternSize == 1 || patternSize == 2 || patternSize == 4 || patternSize == 8 ||
+           patternSize == 16) &&
+@@ -2649,6 +2653,10 @@ bool KernelBlitManager::fillBuffer2D(device::Memory& memory, const void* pattern
+     auto constBuf = isGraphPktCapturing
+                         ? gpu().command()->getGraphKernArg(kCBSize, kCBAlignment, dev().index())
+                         : gpu().allocKernArg(kCBSize, kCBAlignment);
++    if (constBuf == nullptr) {
++      LogError("fillBuffer2D: failed to allocate the fill constant buffer (out of memory)");
++      return false;
++    }
+     memcpy(constBuf, pattern, patternSize);
+ 
+     constexpr bool kDirectVa = true;
+@@ -3566,6 +3574,10 @@ bool KernelBlitManager::batchMemOps(const void* paramArray, size_t paramSize,
+   auto constBuf = isGraphPktCapturing
+       ? gpu().command()->getGraphKernArg(count * paramSize, kCBAlignment, dev().index())
+       : gpu().allocKernArg(count * paramSize, kCBAlignment);
++  if (constBuf == nullptr) {
++    LogError("batchMemOps: failed to allocate the parameter buffer (out of memory)");
++    return false;
++  }
+   memcpy(constBuf, paramArray, (count * paramSize));
+ 
+   setArgument(kernels_[blitType], 0, sizeof(cl_mem), constBuf, 0, nullptr, kDirectVa);
+diff --git a/projects/clr/rocclr/device/rocm/rocvirtual.cpp b/projects/clr/rocclr/device/rocm/rocvirtual.cpp
+index 77afcab4d4..805b9a9a6b 100644
+--- a/projects/clr/rocclr/device/rocm/rocvirtual.cpp
++++ b/projects/clr/rocclr/device/rocm/rocvirtual.cpp
+@@ -4760,6 +4760,10 @@ bool VirtualGPU::submitKernelInternal(const amd::NDRangeContainer& sizes, const
+           allocKernArg(gpuKernel.KernargSegmentByteSize(), gpuKernel.KernargSegmentAlignment()));
+     }
+ 
++    if (argBuffer == nullptr) {
++      LogError("submitKernelInternal: failed to allocate the kernel argument buffer (out of memory)");
++      return false;
++    }
+     amd::nontemporalMemcpy(argBuffer, parameters, argSize);
+     // When the queue ring buffer is in device memory, kernarg NT stores and
+     // the dispatch packet all travel to the same PCIe endpoint.  PCIe posted

@@ -1,0 +1,60 @@
+From 4c2c644cbe736676ad68d958da59b9c30e7fb820 Mon Sep 17 00:00:00 2001
+From: Ohgur <ohgur@users.noreply.github.com>
+Date: Fri, 28 Aug 2026 00:28:29 +0000
+Subject: [PATCH] hipGraph: propagate UpdateAQLPacket failure out of
+ hipGraphExecUpdate
+
+hipGraphExecUpdate assigns the result of GraphExecBase::UpdateAQLPacket to
+status and then never inspects it. When the recapture fails, for example when
+a kernarg allocation cannot be satisfied under device-memory exhaustion, the
+function falls through to updateResult_out = hipGraphExecUpdateSuccess and
+returns hipSuccess while the executable graph still holds the PREVIOUSLY
+captured packet. The next launch replays that stale packet: the kernel runs
+with the old arguments, which is silent wrong output, and once the kernarg pool
+recycles the slot the packet itself can be malformed.
+
+Every other UpdateAQLPacket call site in this file already propagates the
+status via HIP_RETURN(status); this one is the outlier. Surface the failure the
+same way, reporting the offending node in hErrorNode_out and
+hipGraphExecUpdateError in updateResult_out so callers can fall back to
+destroying and reinstantiating the exec.
+
+Reproduced on gfx1100 (Radeon RX 7900 XTX) with a reproducer that exhausts
+device memory and then repeatedly updates and relaunches a captured
+single-node graph, checking the value the kernel actually wrote:
+
+  stock                        SIGSEGV inside libamdhip64
+  with the kernarg null checks kernel wrote 83106 when it asked for 83107
+  with this change             clean hipErrorGraphExecUpdateFailure
+
+Verified present at develop as of this base commit.
+---
+ projects/clr/hipamd/src/hip_graph.cpp | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/projects/clr/hipamd/src/hip_graph.cpp b/projects/clr/hipamd/src/hip_graph.cpp
+index 7bbf2df9d2..59bf6f05f8 100644
+--- a/projects/clr/hipamd/src/hip_graph.cpp
++++ b/projects/clr/hipamd/src/hip_graph.cpp
+@@ -2830,6 +2830,16 @@ hipError_t hipGraphExecUpdate(hipGraphExec_t hGraphExec, hipGraph_t hGraph,
+         auto graphExec = reinterpret_cast<hip::GraphExecBase*>(hGraphExec);
+         if (newGraphNodes[i]->GraphCaptureEnabled()) {
+           status = graphExec->UpdateAQLPacket(reinterpret_cast<hip::GraphKernelNode*>(oldGraphExecNodes[i]));
++          if (status != hipSuccess) {
++            // A packet recapture failure (e.g. kernarg allocation under device-memory
++            // exhaustion) leaves the exec holding the PREVIOUSLY captured packet.  Reporting
++            // success here makes the next launch execute that stale packet: silent output
++            // corruption, and with kernarg-pool recycling a malformed AQL packet.  Surface it,
++            // as every other UpdateAQLPacket call site in this file already does.
++            *hErrorNode_out = reinterpret_cast<hipGraphNode_t>(newGraphNodes[i]);
++            *updateResult_out = hipGraphExecUpdateError;
++            HIP_RETURN(hipErrorGraphExecUpdateFailure);
++          }
+         }
+       }
+     } else {
+
+base-commit: e92445f708bfd09d679363144948fa60af6bebdc
+-- 
+2.43.0
+

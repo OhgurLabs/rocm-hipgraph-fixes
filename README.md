@@ -7,7 +7,13 @@ device-memory exhaustion, `hipGraphExecUpdate` first crashed the process
 executed stale kernel arguments while reporting success.
 
 Upstream: crash reported as ROCm/rocm-systems#10021 with fix PR #10022 (not ours;
-backported here). The silent-execution defect and its fix are ours (PR pending).
+backported here). The silent-execution defect and its fix are ours, PR
+[#10714](https://github.com/ROCm/rocm-systems/pull/10714). Both PRs were open and unmerged when
+last checked (2026-08-27).
+
+**Both defects still ship in ROCm 10.0.0, and in the 10.1.0 nightly dated 2026-08-27.** Patches
+ported to the 10.0 source, the rebased PR, and the per-arm evidence are in
+[`rocm-10/`](rocm-10/).
 
 ## What these patches are, honestly
 
@@ -22,13 +28,24 @@ Measured on gfx1100 at 0 MiB free: one failure per ~4.1k updates, 25 consecutive
 recovery cycles, 102,600 verified-bit-exact launches, no resource creep. The
 allocator-side fix (slot reuse on update) belongs upstream.
 
-## Results (gfx1100, llama.cpp master b3c3b96, Qwen 27B Q4_K_XL, c=217088)
+## Results on 7.14 (gfx1100, llama.cpp master b3c3b96, Qwen 27B Q4_K_XL, c=217088)
 
 | runtime | outcome at the VRAM floor |
 |---|---|
 | stock 7.14 (also 6.4.4/7.2.2/7.2.4) | SIGSEGV; 5 of 8 deep runs that entered the trigger region crashed |
 | + PR #10022 only | silent wrong output (stale kernel args), later malformed AQL packet -> queue abort; on our host one such abort leaked 25.7 GB in KFD and needed a host reboot |
 | + both patches | zero crashes/corruption in 32 deep runs; 7 runs crossed the previously always-fatal depth band; deepest 209,439 tokens |
+
+## ROCm 10
+
+Both defects are still present in ROCm 10.0.0 as shipped, and in AMD's 10.1.0 nightly dated
+2026-08-27. Stock 10.0.0 segfaults on the reproducer; with #10022 alone the crash becomes a silent
+wrong result; with both fixes it returns `hipErrorGraphExecUpdateFailure` (910) with `errorNode`
+set. The 7.14 diffs above do not apply to the 10.0 tree, so the port is a rebase rather than a
+transplant.
+
+Patches, the rebased PR #10714, the anchored applier and the per-arm evidence (one library per
+arm, each bound to a sha256) are in [`rocm-10/`](rocm-10/README.md).
 
 ## Files
 
@@ -42,6 +59,9 @@ allocator-side fix (slot reuse on update) belongs upstream.
   with both patches.
 - `recover_verify.hip` — the recovery-correctness probe: ggml-style
   destroy/re-instantiate loop at 0 MiB free with per-launch output verification.
+- `rocm-10/` — the same two defects on ROCm 10.0.0 and the 10.1.0 nightly: patches ported to
+  the 10.0 source, our PR #10714 rebased onto `develop`, an anchored applier, and the per-arm
+  evidence with library hashes.
 
 Workaround with no patches: `GGML_CUDA_DISABLE_GRAPHS=1` (slower, crash-free), or
 the Vulkan backend (never affected).
